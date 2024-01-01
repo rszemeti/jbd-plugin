@@ -12,6 +12,9 @@ The default buss is "house", but this is freeform text and can be alloacted as d
 
 ![Settings in SignalK](https://github.com/rszemeti/jbd-plugin/blob/main/images/settings.png "Signal K settings")
 
+The battery data is then available in SignalK as usual, for example in the instrumentpanel "webapp":
+![Available Paths](https://github.com/rszemeti/jbd-plugin/blob/main/images/available.png  "Available Paths") 
+
 ## Prerequisites
 
 This package requires Python 3 and the `bleak` package for Python. Ensure you have Python 3 installed on your system. You can download it from [python.org](https://www.python.org/downloads/).
