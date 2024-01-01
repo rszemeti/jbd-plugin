@@ -1,10 +1,14 @@
 {
   "name": "jbd-plugin",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "jbd battery plugin for SignalK",
   "keywords": [
     "signalk-node-server-plugin",
-    "signalk-category-ais"
+    "fogstar",
+    "jbd",
+    "bluetooth",
+    "ble",
+    "python"
   ],
   "signalk-plugin-enabled-by-default": false,
   "signalk": {
