@@ -36,43 +36,43 @@ plugin.start = function(options, restartPlugin) {
             {
               values: [
                 {
-                  path: `electrical.batteries.house.voltage.${battery.id}`,
+                  path: `electrical.batteries.${battery.bus}.voltage.${battery.id}`,
                   value: jsonData["Total Voltage"]
                 },
                 {
-                  path: `electrical.batteries.house.name.${battery.id}`,
+                  path: `electrical.batteries.${battery.bus}.name.${battery.id}`,
                   value: battery.name
                 },
                 {
-                  path: `electrical.batteries.house.capacity.nominal.${battery.id}`,
+                  path: `electrical.batteries.${battery.bus}.capacity.nominal.${battery.id}`,
                   value: jsonData["Nominal Capacity J"]
                 },
                 {
-                  path: `electrical.batteries.house.capacity.remaining.${battery.id}`,
+                  path: `electrical.batteries.${battery.bus}.capacity.remaining.${battery.id}`,
                   value: jsonData["Residual Capacity J"]
                 },
                 {
-                  path: `electrical.batteries.house.current.${battery.id}`, // Ensure this path is correct
+                  path: `electrical.batteries.${battery.bus}.current.${battery.id}`, // Ensure this path is correct
                   value: jsonData["Current"]
                 },
                 {
-                  path: `electrical.batteries.house.capacity.stateOfCharge.${battery.id}`, // Ensure this path is correct
+                  path: `electrical.batteries.${battery.bus}.capacity.stateOfCharge.${battery.id}`, // Ensure this path is correct
                   value: jsonData["RSOC"]
                 },
                 {
-                  path: `electrical.batteries.house.cycles.${battery.id}`, // Ensure this path is correct
+                  path: `electrical.batteries.${battery.bus}.cycles.${battery.id}`, // Ensure this path is correct
                   value: jsonData["Cycle Life"]
                 },
                 {
-                  path: `electrical.batteries.house.capacity.temperature.${battery.id}`, // Ensure this path is correct
+                  path: `electrical.batteries.${battery.bus}.temperature.${battery.id}`, // Ensure this path is correct
                   value: jsonData["Temperature"]
                 },
                 {
-                  path: `electrical.batteries.house.protection.${battery.id}`, // Ensure this path is correct
+                  path: `electrical.batteries.${battery.bus}.protection.${battery.id}`, // Ensure this path is correct
                   value: jsonData["Protection Status"]
                 },
                 {
-                  path: `electrical.batteries.house.chemistry.${battery.id}`, // Ensure this path is correct
+                  path: `electrical.batteries.${battery.bus}.chemistry.${battery.id}`, // Ensure this path is correct
                   value: 'LiFePO4'
                 }
                   
@@ -108,8 +108,8 @@ plugin.start = function(options, restartPlugin) {
             updates: [
               {
                 values: [
-                  { path: `electrical.batteries.house.voltage.${battery.id}`, value: null },
-                  { path: `electrical.batteries.house.capacity.${battery.id}`, value: null },
+                  { path: `electrical.batteries.${battery.bus}.voltage.${battery.id}`, value: null },
+                  { path: `electrical.batteries.${battery.bus}.capacity.${battery.id}`, value: null },
                   // ... set other paths to null or ignore as needed
                 ]
               }
