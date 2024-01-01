@@ -153,7 +153,7 @@ class BMSData:
             for t in self.ntc_contents:
                 temp += t
             temp = temp/self.ntc_numbers
-            temp += 272.1
+            temp += 273.15
             return temp
         else:
             return None

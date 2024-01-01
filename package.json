@@ -1,6 +1,6 @@
 {
   "name": "jbd-plugin",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "jbd battery plugin for SignalK",
   "keywords": [
     "signalk-node-server-plugin",
