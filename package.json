@@ -1,0 +1,20 @@
+{
+  "name": "jbd-plugin",
+  "version": "1.0.0",
+  "description": "jbd battery plugin for SignalK",
+  "keywords": [
+    "signalk-node-server-plugin",
+    "signalk-category-ais"
+  ],
+  "signalk-plugin-enabled-by-default": false,
+  "signalk": {
+    "appIcon": "./assets/icons/icon-72x72.png",
+    "displayName": "JBD BMS Plugin"
+  },
+  "main": "plugin/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Robin Szemeti",
+  "license": "ISC"
+}
