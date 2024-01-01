@@ -12,8 +12,17 @@ The default buss is "house", but this is freeform text and can be alloacted as d
 
 ![Settings in SignalK](https://github.com/rszemeti/jbd-plugin/blob/main/images/settings.png "Signal K settings")
 
-The battery data is then available in SignalK as usual, for example in the instrumentpanel "webapp":
+The battery data is then available in SignalK as usual, for example in the instrumentpanel "webapp". Note that availble capacity is always shown in Joules, temperatures are in Kelvin. 
+
 ![Available Paths](https://github.com/rszemeti/jbd-plugin/blob/main/images/available.png  "Available Paths") 
+
+Configure the paths display as needed:
+
+![Available Paths](https://github.com/rszemeti/jbd-plugin/blob/main/images/dashboard.png  "Dashboard") 
+
+## Temperatures
+
+Battery temperatures are in Kelvin.  There are multiple temperature sensors in the battery, the figure displayed is the average value calculated across all the sensors.
 
 ## Prerequisites
 
