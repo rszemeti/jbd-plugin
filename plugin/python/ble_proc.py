@@ -2,50 +2,43 @@ import asyncio
 import sys
 from battery import BMS
 
-MAX_RETRIES = 5
 RETRY_DELAY = 30  # seconds
 
-async def read_battery_data(address, delay):
-    battery = BMS(address)
 
-    # Retry loop for connecting
-    for attempt in range(MAX_RETRIES):
+async def read_battery_data(address, delay, adapter='', use_bluez_devices=False):
+    while True:
+        battery = BMS(address, adapter=adapter, use_bluez_devices=use_bluez_devices)
         try:
-            await battery.connect()
-            if battery.client.is_connected:
-                #print("Connected to the battery.")
-                break
+            if not await asyncio.wait_for(battery.connect(), timeout=60):
+                raise ConnectionError("Battery connection failed")
+            while battery.client.is_connected:
+                await battery.get_basic()
+                await battery.get_cells()
+                await asyncio.sleep(delay)
         except Exception as e:
-            print(f"Failed to connect: {e}")
-        if attempt < MAX_RETRIES - 1:
-            print(f"Retrying in {RETRY_DELAY} seconds...")
-            await asyncio.sleep(RETRY_DELAY)
-        else:
-            print("Maximum connection attempts reached. Exiting.")
-            return
+            print(f"{type(e).__name__}: {e}; retrying in {RETRY_DELAY}s", file=sys.stderr)
+        finally:
+            try:
+                await asyncio.wait_for(battery.disconnect(), timeout=10)
+            except Exception as e:
+                print(f"Disconnect failed: {e}", file=sys.stderr)
+        await asyncio.sleep(RETRY_DELAY)
 
-    try:
-        while True:
-            await battery.get_basic()
-            await asyncio.sleep(delay)
-            # The SignalK schema has no standard for individual cell voltages
-            # They could be enabled and distributed with meta inf, but meh.
-            #await battery.get_cells()
-            #await asyncio.sleep(delay)
-
-    finally:
-        await battery.disconnect()
 
 def main():
-    if len(sys.argv) != 3:
-        print("Usage: python foo.py <NAME> <DELAY_IN_SECONDS>")
-        return
-
-    device_address = sys.argv[1]
+    if len(sys.argv) not in (3, 5):
+        raise SystemExit("Usage: ble_proc.py NAME DELAY_SECONDS [ADAPTER USE_BLUEZ_DEVICES]")
     delay = float(sys.argv[2])
+    if delay <= 0:
+        raise SystemExit("DELAY_SECONDS must be positive")
+    adapter = sys.argv[3] if len(sys.argv) == 5 else ''
+    use_bluez_devices = len(sys.argv) == 5 and sys.argv[4] == 'true'
+    if use_bluez_devices and (not adapter or not sys.platform.startswith('linux')):
+        raise SystemExit("Known BlueZ devices require Linux and an explicit adapter, such as hci1")
+    if ':' in adapter and not sys.platform.startswith('linux'):
+        raise SystemExit("Selecting a Bluetooth adapter by hardware address requires Linux")
+    asyncio.run(read_battery_data(sys.argv[1], delay, adapter, use_bluez_devices))
 
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(read_battery_data(device_address, delay))
 
 if __name__ == "__main__":
     main()
