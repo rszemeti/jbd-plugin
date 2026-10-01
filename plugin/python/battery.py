@@ -1,5 +1,6 @@
 import asyncio
 import json
+import sys
 from bleak import BleakClient, BleakScanner
 
 class BMS:
@@ -9,34 +10,90 @@ class BMS:
     CMD_BASIC_INFO = 0x03
     CMD_CELL_VOLTAGE = 0x04
     
-    def __init__(self,name):
+    def __init__(self,name, adapter='', use_bluez_devices=False):
+        self.adapter = adapter
+        self.adapter_address = adapter if ':' in adapter else None
+        self.use_bluez_devices = use_bluez_devices
         self.bms_data = BMSData()
         self.device_name = name
         self.mac = None
         self.client = None
         self.response_buffer = bytearray()
+        self.basic_received = asyncio.Event()
+        self.cells_received = asyncio.Event()
+
+    async def known_bluez_device(self):
+        from dbus_fast.aio import MessageBus
+        from dbus_fast.constants import BusType, MessageType
+        from dbus_fast.message import Message
+        from bleak.backends.device import BLEDevice
+        bus = MessageBus(bus_type=BusType.SYSTEM)
+        try:
+            await asyncio.wait_for(bus.connect(), timeout=10)
+            reply = await asyncio.wait_for(bus.call(Message(
+                destination='org.bluez', path='/',
+                interface='org.freedesktop.DBus.ObjectManager',
+                member='GetManagedObjects')), timeout=10)
+            if reply.message_type == MessageType.ERROR:
+                raise RuntimeError(str(reply.error_name) + ': ' + str(reply.body))
+            objects = reply.body[0]
+            if self.adapter_address:
+                # Resolve the hardware address each time; hci numbers can change after reboot.
+                self.adapter = None
+                for adapter_path, interfaces in objects.items():
+                    props = interfaces.get('org.bluez.Adapter1', {})
+                    address = props.get('Address')
+                    if address and address.value.lower() == self.adapter_address.lower():
+                        self.adapter = adapter_path.rsplit('/', 1)[-1]
+                        break
+                if self.adapter is None:
+                    raise RuntimeError(f'Bluetooth adapter {self.adapter_address} not found')
+            if not self.use_bluez_devices:
+                return None
+            matches = []
+            for device_path, interfaces in objects.items():
+                if not device_path.startswith('/org/bluez/' + self.adapter + '/'):
+                    continue
+                raw = interfaces.get('org.bluez.Device1')
+                if raw is None:
+                    continue
+                props = {key: value.value for key, value in raw.items()}
+                if props.get('Name') == self.device_name:
+                    matches.append(BLEDevice(props['Address'], props.get('Name'),
+                                             {'path': device_path, 'props': props}))
+            if len(matches) > 1:
+                raise RuntimeError('Multiple devices have this name; use unique battery names')
+            return matches[0] if matches else None
+        finally:
+            bus.disconnect()
 
     async def connect(self):
-        devices = await BleakScanner.discover()
-
-        if self.mac is None:
-            for device in devices:
-                if device.name == self.device_name:
-                    self.mac = device.address
-                    break
-
-        if self.mac is None:
-            print(f"Device with name {self.device_name} not found")
+        device = await self.known_bluez_device() if self.use_bluez_devices or self.adapter_address else None
+        kwargs = {'bluez': {'adapter': self.adapter}} if self.adapter else {}
+        if device is None:
+            scan_kwargs = dict(kwargs)
+            if self.use_bluez_devices:
+                scan_kwargs['bluez'] = {'adapter': self.adapter, 'filters': {'DuplicateData': True}}
+            devices = await BleakScanner.discover(**scan_kwargs)
+            matches = [device for device in devices if device.name == self.device_name]
+            if len(matches) > 1:
+                raise RuntimeError('Multiple devices have this name; use unique battery names')
+            device = matches[0] if matches else None
+            if device is None and self.use_bluez_devices:
+                device = await self.known_bluez_device()
+        if device is None:
+            print(f"Device with name {self.device_name} not found", file=sys.stderr)
             return
 
-        self.client = BleakClient(self.mac)
+        self.mac = device.address
+        self.client = BleakClient(device, **kwargs)
         try:
             await self.client.connect()
             if not self.client.is_connected:
-                print(f"Failed to connect to {device_address}")
+                print(f"Failed to connect to {self.mac}", file=sys.stderr)
                 return False
         except Exception as e:
-            print(f"Connection failed: {e}")
+            print(f"Connection failed: {e}", file=sys.stderr)
             return False
 
         await self.client.start_notify(self.UUID_RX, self.notification_handler)
@@ -46,23 +103,34 @@ class BMS:
         return bytes([0xDD, 0xA5, command, 0x00, 0xFF, 0xFF - (command - 1), 0x77])
 
     async def notification_handler(self, sender, data):
-
         self.response_buffer.extend(data)
-
-        # Check if the buffer ends with the 'w' delimiter
-        if self.response_buffer.endswith(b'w'):
-            # Extract the command value
-            command = self.response_buffer[1]
-
-            # Copy and clear the buffer
-            complete_message = self.response_buffer[:]
-            self.response_buffer = bytearray()
-
-            # Determine which parsing function to call
-            if command == self.CMD_BASIC_INFO:
-                self.parse_info(complete_message)
-            elif command == self.CMD_CELL_VOLTAGE:
-                self.parse_cells(complete_message)
+        while self.response_buffer:
+            if self.response_buffer[0] != 0xDD:
+                del self.response_buffer[0]
+                continue
+            if len(self.response_buffer) < 4:
+                return
+            length = self.response_buffer[3]
+            if len(self.response_buffer) < length + 7:
+                return
+            frame = bytes(self.response_buffer[:length + 7])
+            checksum = (-sum(frame[2:4 + length])) & 0xFFFF
+            if frame[-1] != 0x77 or int.from_bytes(frame[-3:-1], 'big') != checksum:
+                del self.response_buffer[0]
+                continue
+            del self.response_buffer[:length + 7]
+            if frame[2] != 0:
+                continue
+            if frame[1] == self.CMD_BASIC_INFO:
+                if length < 23 or not 1 <= frame[25] <= 32 or length < 23 + 2 * frame[26]:
+                    continue
+                self.parse_info(frame)
+                self.basic_received.set()
+            elif frame[1] == self.CMD_CELL_VOLTAGE:
+                if not length or length % 2 or length // 2 != self.bms_data.cell_block_numbers:
+                    continue
+                self.parse_cells(frame)
+                self.cells_received.set()
 
     def parse_info(self,buf):
         # Implement the logic to parse info messages
@@ -71,25 +139,26 @@ class BMS:
         print(self.bms_data.to_json())
 
     def parse_cells(self,buf):
-        # Implement the logic to parse cell messages
-        # print("Parsing cells:", buf)
-        self.bms_data.parse_cell_data(buf)
-        print(self.bms_data.to_json())
+        cells = self.bms_data.parse_cell_data(buf)
+        print(json.dumps({"Cell Voltages": cells}))
 
     async def send_command(self,client, command):
         await self.client.write_gatt_char(self.UUID_TX, command, response=False)
 
     async def get_basic(self):
+        self.basic_received.clear()
         await self.send_command(self.client, self.jbd_command(self.CMD_BASIC_INFO))
+        await asyncio.wait_for(self.basic_received.wait(), timeout=10)
 
     async def get_cells(self):
+        self.cells_received.clear()
         await self.send_command(self.client, self.jbd_command(self.CMD_CELL_VOLTAGE))
+        await asyncio.wait_for(self.cells_received.wait(), timeout=10)
  
 
     async def disconnect(self):
-        if self.client.is_connected:
-            await self.client.stop_notify(self.UUID_RX)
-        self.client.disconnect()
+        if self.client is not None:
+            await self.client.disconnect()
 
 class BMSData:
     def __init__(self):
@@ -122,7 +191,7 @@ class BMSData:
 
     def parse_data(self,data):
         self.raw_data = data
-        if len(self.raw_data) < 34:  # Check minimum length
+        if len(self.raw_data) < 30:  # Check minimum length
             print("Incomplete data")
             return
         # Check for start byte and status byte
@@ -180,7 +249,7 @@ class BMSData:
             "Temperature": self.get_temp(),
             "Cell Voltages": self.cell_voltages  # Assuming this is already a list
         }
-        return json.dumps(data, indent=4)
+        return json.dumps(data)
 
     @staticmethod
     def parse_date(data):
