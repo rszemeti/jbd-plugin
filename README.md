@@ -8,6 +8,10 @@ The plugin can handle multiple batteries, allocating them to different busses on
 
 Add batteries, one per line. Use the name of the battery *exactly* as allocated to the battery via the app.
 
+Battery MAC addresses are looked up by name using Bluetooth discovery or known
+BlueZ devices; none are hard-coded. Give each battery a unique name. The optional
+**Bluetooth adapter** address identifies the Cerbo's controller, not a battery.
+
 The default buss is "house", but this is freeform text and can be alloacted as desired. Do not duplicate IDs on the same buss!
 
 Use a **60-second refresh interval**, or 30 seconds for closer observation.
